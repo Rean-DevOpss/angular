@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'Dockerfile'
+        IMAGE_TAG = "${env.BUILD_ID}"
+    }
+
+    stages {
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build the Docker image using the Dockerfile in the repository
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Run tests inside the Docker container
+                    docker.image("${IMAGE_NAME}:${IMAGE_TAG}").inside {
+                        sh 'ng test --watch=false'
+                    }
+                }
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                script {
+                    // Run the build inside the Docker container
+                    docker.image("${IMAGE_NAME}:${IMAGE_TAG}").inside {
+                        sh 'ng build --prod'
+                    }
+                }
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                // Archive the build artifacts (the production build output)
+                archiveArtifacts artifacts: 'dist/**', allowEmptyArchive: true
+            }
+        }
+
+        stage('Clean Up') {
+            steps {
+                script {
+                    // Optionally remove the Docker image after use to free up space
+                    docker.image("${IMAGE_NAME}:${IMAGE_TAG}").remove()
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Clean the workspace after the build is complete
+            cleanWs()
+        }
+        success {
+            echo 'Build completed successfully!'
+        }
+        failure {
+            echo 'Build failed. Check the logs for errors.'
+        }
+    }
+}
